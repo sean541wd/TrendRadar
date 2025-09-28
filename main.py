@@ -485,7 +485,39 @@ def save_titles_to_file(results: Dict, id_to_name: Dict, failed_ids: List) -> st
 
     return file_path
 
-
+def get_weekly_data() -> Dict:
+    """获取过去7天的所有数据并汇总"""
+    weekly_data = {}
+    today = get_beijing_time()
+    
+    for i in range(7):
+        target_date = today - timedelta(days=i)
+        date_folder = target_date.strftime("%Y年%m月%d日")
+        txt_dir = Path("output") / date_folder / "txt"
+        
+        if not txt_dir.exists():
+            continue
+            
+        # 读取当天所有txt文件
+        for file in txt_dir.glob("*.txt"):
+            try:
+                # 调用现有函数解析单文件数据
+                titles_by_id, id_to_name = parse_file_titles(file)
+                # 合并到周数据中（去重逻辑可根据需求添加）
+                for source_id, titles in titles_by_id.items():
+                    if source_id not in weekly_data:
+                        weekly_data[source_id] = {}
+                    for title, info in titles.items():
+                        if title not in weekly_data[source_id]:
+                            weekly_data[source_id][title] = info
+                        else:
+                            # 合并排名/热度等信息（示例：保留所有出现的排名）
+                            weekly_data[source_id][title]["ranks"].extend(info["ranks"])
+            except Exception as e:
+                print(f"读取文件 {file} 失败: {e}")
+    
+    return weekly_data
+    
 def load_frequency_words(
     frequency_file: Optional[str] = None,
 ) -> Tuple[List[Dict], List[str]]:
@@ -912,7 +944,18 @@ def format_rank_display(ranks: List[int], rank_threshold: int, format_type: str)
         else:
             return f"[{min_rank} - {max_rank}]"
 
-
+# 原逻辑：使用当日爬取的results
+# 改为：如果是周日执行，使用一周数据；否则使用当日数据（根据需求调整）
+today_weekday = get_beijing_time().weekday()  # 0=周一，6=周日
+if today_weekday == 6:  # 周日
+    print("开始汇总一周数据...")
+    weekly_data = get_weekly_data()
+    # 使用weekly_data生成推送内容
+    content = generate_push_content(weekly_data)  # 需适配新数据结构
+else:
+    # 原有单日数据逻辑
+    content = generate_push_content(results)
+    
 def count_word_frequency(
     results: Dict,
     word_groups: List[Dict],
